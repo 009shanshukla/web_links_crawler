@@ -1,76 +1,95 @@
 from urllib.request import urlopen
-from get_links import LinkFinder
-from general import*
+from link_finder import LinkFinder
+from domain import *
+from general import *
 
+
+### all methods and variables of a crawler will be defined in Spider class
 class Spider:
-	### instance variables
-	base_url = ''
-	project_name = ''
-	domain_name = ''
-	queue_file = ''
-	crawled_file = ''
-	queue = set()
-	crawled = set()
 
-	def __init__(self, project_name, domain_name, base_url):
-		Spider.project_name = project_name
-		Spider.domain_name = domain_name
-		Spider.base_url = base_url
-		Spider.queue_file = Spider.project_name + '/queue.txt'
-		Spider.crawled_file = Spider.project_name + '/crawled.txt'
-		self.boot()
-		self.crawl_page('First Spider', Spider.base_url)
+    project_name = ''
+    base_url = ''
+    domain_name = ''
+    queue_file = ''
+    crawled_file = ''
+    queue = set()
+    crawled = set()
 
+    def __init__(self, project_name, base_url, domain_name):
+        Spider.project_name = project_name
+        Spider.base_url = base_url
+        Spider.domain_name = domain_name
+        Spider.queue_file = Spider.project_name + '/queue.txt'
+        Spider.crawled_file = Spider.project_name + '/crawled.txt'
+        self.boot()
+        self.crawl_page('First spider', Spider.base_url)
 
-	### as we are not initializind any instance of class in some functions, we can make it static 	
-	@staticmethod
-	def boot():
-		create_proj_dir(Spider.project_name)
-		create_data_file(Spider.project_name, Spider.base_url)
-		Spider.queue = file_to_set(Spider.queue_file)	
-		Spider.crawled = file_to_set(Spider.crawled_file)
+    # Creates directory and files for project on first run and starts the spider
+    @staticmethod
+    def boot():
+        create_project_dir(Spider.project_name)
+        create_data_files(Spider.project_name, Spider.base_url)
+        Spider.queue = file_to_set(Spider.queue_file)
+        Spider.crawled = file_to_set(Spider.crawled_file)
 
-	@staticmethod	
-	def crawl_page(thread_name, page_url):
-		if page_url not in Spider.crawled:
-			print(thread_name + " now crawling " + page_url)
-			print("queue " + str(len(Spider.queue)) + " crawled " + str(len(Spider.crawled)))
-			Spider.add_links_queue(Spider.gather_links(page_url))
-			Spider.queue.remove(page_url)
-			Spider.crawled.add(page_url)
-			Spider.update_files()	
+    # Updates user display, fills queue and updates files
+    @staticmethod
+    def crawl_page(thread_name, page_url):
+        if page_url not in Spider.crawled:
+            print(thread_name + ' now crawling ' + page_url)
+            print('Queue ' + str(len(Spider.queue)) + ' | Crawled  ' + str(len(Spider.crawled)))
 
-	@staticmethod
-	def gather_links(page_url):
-		html_string = ''
-		try:
-			response = urlopen(page_url)
-			if response.getheader('Content-Type') == 'text/html':
-				html_byte = response.read()
-				html_string = html_byte.decode("utf-8")
-				finder = LinkFinder(Spider.base_url, page_url)
-				finder.feed(html_string)
-		except:
-			print("unable to crawl page")
-			return set()
+            ### add all links from the current page
+            Spider.add_links_to_queue(Spider.gather_links(page_url))
 
-		return(finder.page_links())	
+            ### remove the current page from queue set
+            Spider.queue.remove(page_url)
 
-	@staticmethod
-	def add_links_queue(links):
-		for url in links:
-			if url in crawled:
-				continue
-			if url in queue:
-				continue
-			if Spider.domain_name not in url:
-				continue
-			Spider.queue.add(url)
-			
-	@staticmethod
-	def update_files():
-		set_to_file(Spider.queue, Spider.queue_file)
-		set_to_file(Spider.crawled, Spider.crawled_file)
+            ### add current page  onto crawled set
+            Spider.crawled.add(page_url)
 
-				
-				
+            ### from both sets, update it onto file
+            Spider.update_files()
+
+    # Converts raw response data into readable information and checks for proper html formatting(links are returned)
+    @staticmethod
+    def gather_links(page_url):
+        html_string = ''    ### will store link string
+        try:
+            response = urlopen(page_url)       ### connect with the page
+
+            ### check if a page is in html format if yes, continue
+            if 'text/html' in response.getheader('Content-Type'):
+
+            	### read() gives html page in bytes, then decode it into utf-8(readable english lang)
+                html_bytes = response.read()                     
+                html_string = html_bytes.decode("utf-8")
+
+            ### create the object of LinkFinder class and send html for parsing    
+            finder = LinkFinder(Spider.base_url, page_url)
+            finder.feed(html_string)
+        except Exception as e:
+            print(str(e))
+            return set()
+
+        return finder.page_links()
+
+    # Saves queue data to project files
+    @staticmethod
+    def add_links_to_queue(links):
+        for url in links:
+
+        	###  no -repeation of links
+            if (url in Spider.queue) or (url in Spider.crawled):
+                continue
+
+            ### in case links is of another domain , reject it    
+            if Spider.domain_name != get_domain_name(url):
+                continue
+                
+            Spider.queue.add(url)
+
+    @staticmethod
+    def update_files():
+        set_to_file(Spider.queue, Spider.queue_file)
+        set_to_file(Spider.crawled, Spider.crawled_file)
